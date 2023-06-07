@@ -121,6 +121,8 @@ class KX132:
     @property
     def acc_range(self) -> str:
         """
+        Acceleration range of the accelerometer outputs per Table.
+        This range is also called a full-scale range of the accelerometer.
 
         +---------------------------------+------------------+
         | Mode                            | Value            |
@@ -155,6 +157,9 @@ class KX132:
     def acceleration(self) -> Tuple[float, float, float]:
         """
         Acceleration
+        When accelerometer is enabled the 16-bits of valid acceleration data for each
+        axis is routed to :attr:`acceleration`.  The data is updated every user-defined
+        ODR period at the rate set by OSA<3:0> bits in ODCNTL register.
         :return: acceleration
         """
         bufx, bufy, bufz = self._acceleration_data
@@ -170,7 +175,9 @@ class KX132:
     @property
     def tilt_position(self):
         """
-        Current Sensor tilt position.
+        Current Sensor tilt position. Data that is updated at the user-defined
+        ODR frequency determined by OTP<1:0> in CNTL3. Data is protected during
+        register read
         """
         states = {
             1: "Face-Up State (Z+)",
@@ -185,7 +192,9 @@ class KX132:
     @property
     def previous_tilt_position(self):
         """
-        Previous Sensor tilt position.
+        Previous Sensor tilt position. Data that is updated at the user-defined
+        ODR frequency determined by OTP<1:0> in CNTL3. Data is protected during
+        register read
         """
         states = {
             1: "Face-Up State (Z+)",
@@ -251,7 +260,9 @@ class KX132:
     @property
     def tap_doubletap_report(self):
         """
-        Tap/Double Tap report
+        Tap/Double Tap report. Data is updated at the ODR settings determined
+        by OTDT<2:0> in CNTL3. These bits are cleared when interrupt_release function
+        is called.
         """
         states = {
             0: "No Tap/Double Tap reported",
