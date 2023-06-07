@@ -33,6 +33,9 @@ _REG_WHOAMI = const(0x13)
 _CNTL1 = const(0x1B)
 _ACC = const(0x08)
 _TILT_POSITION = const(0x14)
+_PREVIOUS_TILT_POSITION = const(0x15)
+_INS1 = const(0x16)
+_INT_REL = const(0x1A)
 
 STANDBY_MODE = const(0b0)
 NORMAL_MODE = const(0b1)
@@ -47,8 +50,12 @@ acc_range_factor = {ACC_RANGE_2: 2, ACC_RANGE_4: 4, ACC_RANGE_8: 8, ACC_RANGE_16
 
 TILT_DISABLED = const(0b0)
 TILT_ENABLED = const(0b1)
-
 tilt_position_enable_values = (TILT_DISABLED, TILT_ENABLED)
+
+# Tap/Double Tap
+TDTE_DISABLED = const(0b0)
+TDTE_ENABLED = const(0b1)
+tap_doubletap_enable_values = (TDTE_DISABLED, TDTE_ENABLED)
 
 
 class KX132:
@@ -87,13 +94,20 @@ class KX132:
     _device_id = ROUnaryStruct(_REG_WHOAMI, "B")
     _control_register1 = UnaryStruct(_CNTL1, "B")
 
-    _operating_mode = RWBit(_CNTL1, 7)
-    _acc_range = RWBits(2, _CNTL1, 3)
-
     _acceleration_data = Struct(_ACC, "hhh")
 
-    _tilt_position_enable = RWBit(_CNTL1, 0)
     _tilt_position = UnaryStruct(_TILT_POSITION, "B")
+    _previous_tilt_position = UnaryStruct(_PREVIOUS_TILT_POSITION, "B")
+
+    # Register CNTL1 (0x1B)
+    # |PC1|RES|DRDYE|GSEL1|GSEL0|TDTE|----|TPE|
+    _operating_mode = RWBit(_CNTL1, 7)
+    _acc_range = RWBits(2, _CNTL1, 3)
+    _tap_doubletap_enable = RWBit(_CNTL1, 2)
+    _tilt_position_enable = RWBit(_CNTL1, 0)
+
+    _interrupt1 = UnaryStruct(_INS1, "B")
+    _interrupt_release = UnaryStruct(_INT_REL, "B")
 
     def __init__(self, i2c_bus: I2C, address: int = 0x1F) -> None:
         self.i2c_device = i2c_device.I2CDevice(i2c_bus, address)
@@ -169,6 +183,21 @@ class KX132:
         return states[self._tilt_position]
 
     @property
+    def previous_tilt_position(self):
+        """
+        Previous Sensor tilt position.
+        """
+        states = {
+            1: "Face-Up State (Z+)",
+            2: "Face-Down State (Z-)",
+            4: "Up State (Y+)",
+            8: "Down State (Y-)",
+            16: "Right State (X+)",
+            32: "Left State (X-)",
+        }
+        return states[self._previous_tilt_position]
+
+    @property
     def tilt_position_enable(self) -> str:
         """
         Sensor tilt_position_enable
@@ -194,3 +223,49 @@ class KX132:
         self._operating_mode = STANDBY_MODE
         self._tilt_position_enable = value
         self._operating_mode = NORMAL_MODE
+
+    @property
+    def tap_doubletap_enable(self) -> str:
+        """
+        Sensor tap_doubletap_enable
+
+        +---------------------------------+-----------------+
+        | Mode                            | Value           |
+        +=================================+=================+
+        | :py:const:`kx132.TDTE_DISABLED` | :py:const:`0b0` |
+        +---------------------------------+-----------------+
+        | :py:const:`kx132.TDTE_ENABLED`  | :py:const:`0b1` |
+        +---------------------------------+-----------------+
+        """
+        values = ("TDTE_DISABLED", "TDTE_ENABLED")
+        return values[self._tap_doubletap_enable]
+
+    @tap_doubletap_enable.setter
+    def tap_doubletap_enable(self, value: int) -> None:
+        if value not in tap_doubletap_enable_values:
+            raise ValueError("Value must be a valid tap_doubletap_enable setting")
+        self._operating_mode = STANDBY_MODE
+        self._tap_doubletap_enable = value
+        self._operating_mode = NORMAL_MODE
+
+    @property
+    def tap_doubletap_report(self):
+        """
+        Tap/Double Tap report
+        """
+        states = {
+            0: "No Tap/Double Tap reported",
+            1: "Z Positive (Z+) Reported",
+            2: "Z Negative (Z-) Reported",
+            4: "Y Positive (Y+) Reported",
+            8: "Y Negative (Y-) Reported",
+            16: "X Positive (X+) Reported",
+            32: "X Negative (X-) Reported",
+        }
+        return states[self._interrupt1]
+
+    def interrupt_release(self):
+        """
+        Clear the interrupt register
+        """
+        _ = self._interrupt_release
