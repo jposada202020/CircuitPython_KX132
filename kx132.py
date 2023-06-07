@@ -32,6 +32,7 @@ __repo__ = "https://github.com/jposada202020/CircuitPython_KX132.git"
 _REG_WHOAMI = const(0x13)
 _CNTL1 = const(0x1B)
 _ACC = const(0x08)
+_TILT_POSITION = const(0x14)
 
 STANDBY_MODE = const(0b0)
 NORMAL_MODE = const(0b1)
@@ -43,6 +44,11 @@ ACC_RANGE_8 = const(0b10)
 ACC_RANGE_16 = const(0b11)
 acc_range_values = (ACC_RANGE_2, ACC_RANGE_4, ACC_RANGE_8, ACC_RANGE_16)
 acc_range_factor = {ACC_RANGE_2: 2, ACC_RANGE_4: 4, ACC_RANGE_8: 8, ACC_RANGE_16: 16}
+
+TILT_DISABLED = const(0b0)
+TILT_ENABLED = const(0b1)
+
+tilt_position_enable_values = (TILT_DISABLED, TILT_ENABLED)
 
 
 class KX132:
@@ -86,6 +92,9 @@ class KX132:
 
     _acceleration_data = Struct(_ACC, "hhh")
 
+    _tilt_position_enable = RWBit(_CNTL1, 0)
+    _tilt_position = UnaryStruct(_TILT_POSITION, "B")
+
     def __init__(self, i2c_bus: I2C, address: int = 0x1F) -> None:
         self.i2c_device = i2c_device.I2CDevice(i2c_bus, address)
 
@@ -123,8 +132,10 @@ class KX132:
     def acc_range(self, value: int) -> None:
         if value not in acc_range_values:
             raise ValueError("Value must be a valid acc_range setting")
+        self._operating_mode = STANDBY_MODE
         self._acc_range = value
         self._acc_range_mem = value
+        self._operating_mode = NORMAL_MODE
 
     @property
     def acceleration(self) -> Tuple[float, float, float]:
@@ -141,3 +152,45 @@ class KX132:
             bufy / 2**15 * factor,
             bufz / 2**15 * factor,
         )
+
+    @property
+    def tilt_position(self):
+        """
+        Current Sensor tilt position.
+        """
+        states = {
+            1: "Face-Up State (Z+)",
+            2: "Face-Down State (Z-)",
+            4: "Up State (Y+)",
+            8: "Down State (Y-)",
+            16: "Right State (X+)",
+            32: "Left State (X-)",
+        }
+        return states[self._tilt_position]
+
+    @property
+    def tilt_position_enable(self) -> str:
+        """
+        Sensor tilt_position_enable
+
+        +---------------------------------+-----------------+
+        | Mode                            | Value           |
+        +=================================+=================+
+        | :py:const:`kx132.TILT_DISABLED` | :py:const:`0b0` |
+        +---------------------------------+-----------------+
+        | :py:const:`kx132.TILT_ENABLED`  | :py:const:`0b1` |
+        +---------------------------------+-----------------+
+        """
+        values = (
+            "TILT_DISABLED",
+            "TILT_ENABLED",
+        )
+        return values[self._tilt_position_enable]
+
+    @tilt_position_enable.setter
+    def tilt_position_enable(self, value: int) -> None:
+        if value not in tilt_position_enable_values:
+            raise ValueError("Value must be a valid tilt_position_enable setting")
+        self._operating_mode = STANDBY_MODE
+        self._tilt_position_enable = value
+        self._operating_mode = NORMAL_MODE
