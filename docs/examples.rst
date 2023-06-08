@@ -42,3 +42,12 @@ Tap Double Tap example
 .. literalinclude:: ../examples/kx132_tap_doubletap_example.py
     :caption: examples/kx132_tap_doubletap_example.py
     :lines: 5-
+
+Output Data rate setting
+--------------------------
+
+Example showing the Output Data Rate setting
+
+.. literalinclude:: ../examples/kx132_output_data_rate.py
+    :caption: examples/kx132_output_data_rate.py
+    :lines: 5-
