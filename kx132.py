@@ -13,6 +13,7 @@ CircuitPython Driver for the Kionix KX132 Accelerometer
 
 """
 
+import time
 from micropython import const
 from adafruit_bus_device import i2c_device
 from adafruit_register.i2c_struct import ROUnaryStruct, UnaryStruct, Struct
@@ -29,14 +30,18 @@ except ImportError:
 __version__ = "0.0.0+auto.0"
 __repo__ = "https://github.com/jposada202020/CircuitPython_KX132.git"
 
-_REG_WHOAMI = const(0x13)
-_CNTL1 = const(0x1B)
+_ADP = const(0x02)
 _ACC = const(0x08)
+_REG_WHOAMI = const(0x13)
 _TILT_POSITION = const(0x14)
 _PREVIOUS_TILT_POSITION = const(0x15)
 _INS1 = const(0x16)
 _ODCNTL = const(0x21)
 _INT_REL = const(0x1A)
+_CNTL1 = const(0x1B)
+_CNTL2 = const(0x1C)
+_CNTL5 = const(0x1F)
+
 
 STANDBY_MODE = const(0b0)
 NORMAL_MODE = const(0b1)
@@ -61,6 +66,10 @@ tap_doubletap_enable_values = (TDTE_DISABLED, TDTE_ENABLED)
 LOW_POWER_MODE = const(0b0)
 HIGH_PERFORMANCE_MODE = const(0b1)
 performance_mode_values = (LOW_POWER_MODE, HIGH_PERFORMANCE_MODE)
+
+ADP_DISABLED = const(0b0)
+ADP_ENABLED = const(0b1)
+adp_enabled_values = (ADP_DISABLED, ADP_ENABLED)
 
 
 class KX132:
@@ -102,6 +111,7 @@ class KX132:
     _interrupt_release = UnaryStruct(_INT_REL, "B")
 
     _acceleration_data = Struct(_ACC, "hhh")
+    _adp_data = Struct(_ADP, "hhh")
 
     _tilt_position = UnaryStruct(_TILT_POSITION, "B")
     _previous_tilt_position = UnaryStruct(_PREVIOUS_TILT_POSITION, "B")
@@ -113,6 +123,10 @@ class KX132:
     _acc_range = RWBits(2, _CNTL1, 3)
     _tap_doubletap_enable = RWBit(_CNTL1, 2)
     _tilt_position_enable = RWBit(_CNTL1, 0)
+
+    _soft_reset = RWBit(_CNTL2, 7)
+
+    _adp_enabled = RWBit(_CNTL5, 4)
 
     # Register ODCNTL (0x21)
     # |IIR_BYPASS|LPRO|FSTUP|----|OSA3|OSA2|OSA1|OSA0|
@@ -126,6 +140,18 @@ class KX132:
 
         self._operating_mode = NORMAL_MODE
         self.acc_range = ACC_RANGE_2
+
+    def soft_reset(self):
+        """
+        The Software Reset bit initiates software reset, which performs
+        the RAM reboot routine. This bit will remain 1 until the RAM
+        reboot routine is finished.
+        """
+
+        self._operating_mode = STANDBY_MODE
+        self._soft_reset = 1
+        time.sleep(0.05)
+        self._operating_mode = NORMAL_MODE
 
     @property
     def acc_range(self) -> str:
@@ -341,3 +367,47 @@ class KX132:
         self._operating_mode = STANDBY_MODE
         self._performance_mode = value
         self._operating_mode = NORMAL_MODE
+
+    @property
+    def advanced_data_path(self) -> Tuple[float, float, float]:
+        """
+        This will nor return any information unless the :attr:`adp_enabled` is set.
+        Data is updated at the rate set by OADP<3:0> bits in ADP_CNTL1 register. However, if data
+        is routed via RMS block first (ADP_RMS_OSEL bit is set to 1 in ADP_CNTL2 register), the
+        rate is also scaled down by RMS_AVC<2:0> bits in ADP_CNTL1 register.
+        Values will remain the same until sensor is reset
+        """
+        bufx, bufy, bufz = self._adp_data
+
+        factor = acc_range_factor[self._acc_range_mem]
+
+        return (
+            bufx / 2**15 * factor,
+            bufy / 2**15 * factor,
+            bufz / 2**15 * factor,
+        )
+
+    @property
+    def adp_enabled(self) -> str:
+        """
+        Sensor adp_enabled
+
+        +--------------------------------+-----------------+
+        | Mode                           | Value           |
+        +================================+=================+
+        | :py:const:`kx132.ADP_DISABLED` | :py:const:`0b0` |
+        +--------------------------------+-----------------+
+        | :py:const:`kx132.ADP_ENABLED`  | :py:const:`0b1` |
+        +--------------------------------+-----------------+
+        """
+        values = (
+            "ADP_DISABLED",
+            "ADP_ENABLED",
+        )
+        return values[self._adp_enabled]
+
+    @adp_enabled.setter
+    def adp_enabled(self, value: int) -> None:
+        if value not in adp_enabled_values:
+            raise ValueError("Value must be a valid adp_enabled setting")
+        self._adp_enabled = value

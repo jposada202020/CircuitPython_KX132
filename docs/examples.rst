@@ -51,3 +51,12 @@ Example showing the Output Data Rate setting
 .. literalinclude:: ../examples/kx132_output_data_rate.py
     :caption: examples/kx132_output_data_rate.py
     :lines: 5-
+
+Adp enabled settings
+---------------------
+
+Example showing the Adp enabled setting
+
+.. literalinclude:: ../examples/kx132_adp_enabled.py
+    :caption: examples/kx132_adp_enabled.py
+    :lines: 5-
