@@ -35,6 +35,7 @@ _ACC = const(0x08)
 _TILT_POSITION = const(0x14)
 _PREVIOUS_TILT_POSITION = const(0x15)
 _INS1 = const(0x16)
+_ODCNTL = const(0x21)
 _INT_REL = const(0x1A)
 
 STANDBY_MODE = const(0b0)
@@ -56,6 +57,10 @@ tilt_position_enable_values = (TILT_DISABLED, TILT_ENABLED)
 TDTE_DISABLED = const(0b0)
 TDTE_ENABLED = const(0b1)
 tap_doubletap_enable_values = (TDTE_DISABLED, TDTE_ENABLED)
+
+LOW_POWER_MODE = const(0b0)
+HIGH_PERFORMANCE_MODE = const(0b1)
+performance_mode_values = (LOW_POWER_MODE, HIGH_PERFORMANCE_MODE)
 
 
 class KX132:
@@ -93,6 +98,8 @@ class KX132:
 
     _device_id = ROUnaryStruct(_REG_WHOAMI, "B")
     _control_register1 = UnaryStruct(_CNTL1, "B")
+    _interrupt1 = UnaryStruct(_INS1, "B")
+    _interrupt_release = UnaryStruct(_INT_REL, "B")
 
     _acceleration_data = Struct(_ACC, "hhh")
 
@@ -102,12 +109,14 @@ class KX132:
     # Register CNTL1 (0x1B)
     # |PC1|RES|DRDYE|GSEL1|GSEL0|TDTE|----|TPE|
     _operating_mode = RWBit(_CNTL1, 7)
+    _performance_mode = RWBit(_CNTL1, 6)
     _acc_range = RWBits(2, _CNTL1, 3)
     _tap_doubletap_enable = RWBit(_CNTL1, 2)
     _tilt_position_enable = RWBit(_CNTL1, 0)
 
-    _interrupt1 = UnaryStruct(_INS1, "B")
-    _interrupt_release = UnaryStruct(_INT_REL, "B")
+    # Register ODCNTL (0x21)
+    # |IIR_BYPASS|LPRO|FSTUP|----|OSA3|OSA2|OSA1|OSA0|
+    _output_data_rate = RWBits(4, _ODCNTL, 0)
 
     def __init__(self, i2c_bus: I2C, address: int = 0x1F) -> None:
         self.i2c_device = i2c_device.I2CDevice(i2c_bus, address)
@@ -280,3 +289,55 @@ class KX132:
         Clear the interrupt register
         """
         _ = self._interrupt_release
+
+    @property
+    def output_data_rate(self) -> int:
+        """
+        There are 16 different configuration for the Output Data Rate.
+        These rate are divided in two groups.
+        1. Low Power and High Performance Output Data Rates <= 400 Hz
+        2. High Performance Output Data Rates only >= 800 Hz
+
+        Please verify the data sheet for corresponding values
+        The default ODR is 50Hz (0b110|6).
+        """
+
+        return self._output_data_rate
+
+    @output_data_rate.setter
+    def output_data_rate(self, value: int) -> None:
+        if self.performance_mode == "HIGH_PERFORMANCE_MODE":
+            valid_range = range(10, 16)
+        else:
+            valid_range = range(0, 10)
+        if value not in valid_range:
+            raise ValueError(
+                "Value must be a valid setting in relation with the performance mode"
+            )
+        self._operating_mode = STANDBY_MODE
+        self._output_data_rate = value
+        self._operating_mode = NORMAL_MODE
+
+    @property
+    def performance_mode(self) -> str:
+        """
+        Sensor performance_mode
+
+        +-----------------------------------------+-----------------+
+        | Mode                                    | Value           |
+        +=========================================+=================+
+        | :py:const:`kx132.LOW_POWER_MODE`        | :py:const:`0b0` |
+        +-----------------------------------------+-----------------+
+        | :py:const:`kx132.HIGH_PERFORMANCE_MODE` | :py:const:`0b1` |
+        +-----------------------------------------+-----------------+
+        """
+        values = ("LOW_POWER_MODE", "HIGH_PERFORMANCE_MODE")
+        return values[self._performance_mode]
+
+    @performance_mode.setter
+    def performance_mode(self, value: int) -> None:
+        if value not in performance_mode_values:
+            raise ValueError("Value must be a valid performance_mode setting")
+        self._operating_mode = STANDBY_MODE
+        self._performance_mode = value
+        self._operating_mode = NORMAL_MODE
