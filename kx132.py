@@ -41,7 +41,8 @@ _INT_REL = const(0x1A)
 _CNTL1 = const(0x1B)
 _CNTL2 = const(0x1C)
 _CNTL5 = const(0x1F)
-
+_FFTH = const(0x32)
+_FFCNTL = const(0x34)
 
 STANDBY_MODE = const(0b0)
 NORMAL_MODE = const(0b1)
@@ -71,7 +72,11 @@ ADP_DISABLED = const(0b0)
 ADP_ENABLED = const(0b1)
 adp_enabled_values = (ADP_DISABLED, ADP_ENABLED)
 
+FF_DISABLED = const(0b0)
+FF_ENABLED = const(0b1)
+free_fall_enabled_values = (FF_DISABLED, FF_ENABLED)
 
+# pylint: disable=too-many-instance-attributes
 class KX132:
     """Driver for the KX132 Sensor connected over I2C.
 
@@ -116,6 +121,8 @@ class KX132:
     _tilt_position = UnaryStruct(_TILT_POSITION, "B")
     _previous_tilt_position = UnaryStruct(_PREVIOUS_TILT_POSITION, "B")
 
+    _free_fall_threshold = UnaryStruct(_FFCNTL, "B")
+
     # Register CNTL1 (0x1B)
     # |PC1|RES|DRDYE|GSEL1|GSEL0|TDTE|----|TPE|
     _operating_mode = RWBit(_CNTL1, 7)
@@ -127,6 +134,7 @@ class KX132:
     _soft_reset = RWBit(_CNTL2, 7)
 
     _adp_enabled = RWBit(_CNTL5, 4)
+    _free_fall_enabled = RWBit(_FFCNTL, 7)
 
     # Register ODCNTL (0x21)
     # |IIR_BYPASS|LPRO|FSTUP|----|OSA3|OSA2|OSA1|OSA0|
@@ -411,3 +419,43 @@ class KX132:
         if value not in adp_enabled_values:
             raise ValueError("Value must be a valid adp_enabled setting")
         self._adp_enabled = value
+
+    @property
+    def free_fall_enabled(self) -> str:
+        """
+        Sensor free_fall_enabled
+
+        +-------------------------------+-----------------+
+        | Mode                          | Value           |
+        +===============================+=================+
+        | :py:const:`kx132.FF_DISABLED` | :py:const:`0b0` |
+        +-------------------------------+-----------------+
+        | :py:const:`kx132.FF_ENABLED`  | :py:const:`0b1` |
+        +-------------------------------+-----------------+
+        """
+        values = (
+            "FF_DISABLED",
+            "FF_ENABLED",
+        )
+        return values[self._free_fall_enabled]
+
+    @free_fall_enabled.setter
+    def free_fall_enabled(self, value: int) -> None:
+        if value not in free_fall_enabled_values:
+            raise ValueError("Value must be a valid free_fall_enabled setting")
+        self._operating_mode = STANDBY_MODE
+        self._free_fall_enabled = value
+        self._operating_mode = NORMAL_MODE
+
+    @property
+    def free_fall_threshold(self) -> int:
+        """
+        Free Fall Threshold. This value is compared to the top 8
+        bits of the accelerometer 8g output (independent of the
+        actual g-range setting of the device).
+        """
+        return self._free_fall_threshold
+
+    @free_fall_threshold.setter
+    def free_fall_threshold(self, value: int) -> None:
+        self._free_fall_threshold = value
